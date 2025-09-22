@@ -1,13 +1,12 @@
 {
-    "name": "pump-swap-trading-bot",
+    "name": "meteora-dyn-trading-bot",
     "version": "2.0.0",
-    "main": "index.js",
+    "main": "dist/index.js",
     "types": "module",
-    "author": "pumpdotfun",
+    "author": "meteora-ag",
     "scripts": {
-        "dev": "ts-node index.ts",
-        "build": "tsc",
-        "start": "ts-node index.ts"
+        "start": "ts-node index.ts",
+        "build": "tsc"
     },
     "keywords": [
         "pumpswap",
@@ -20,11 +19,16 @@
     "license": "ISC",
     "description": "This is core SDK for pumpdotfun offical AMM pool - PumpSwap",
     "dependencies": {
-        "@pump-fun/pump-swap-sdk": "^0.0.1-beta.22",
+        "@coral-xyz/anchor": "^0.31.0",
+        "@mercurial-finance/dynamic-amm-sdk": "^1.1.23",
+        "@mercurial-finance/vault-sdk": "^2.2.1",
+        "@meteora-ag/dynamic-amm-sdk": "^1.3.2",
+        "@meteora-ag/vault-sdk": "^2.3.1",
         "@solana/spl-token": "^0.4.13",
         "@solana/web3.js": "^1.98.0",
         "bs58": "^5.0.0",
         "dotenv": "^16.4.1",
+        "jito-ts": "^4.2.0",
         "pino": "^8.18.0",
         "pino-pretty": "^10.3.1",
         "pino-std-serializers": "^6.2.2"
@@ -33,6 +37,6 @@
         "@types/bn.js": "^5.1.6",
         "prettier": "^3.2.4",
         "ts-node": "^10.9.2",
-        "typescript": "^5.8.2"
+        "typescript": "^5.8.3"
     }
 }

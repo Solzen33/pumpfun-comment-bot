@@ -114,7 +114,6 @@ export function editJson(newData: Partial<Data>, filename: string = "data.json")
 export interface Settings {
     mint: null | PublicKey
     poolId: null | PublicKey
-    isPump: Boolean
     amount: number
     slippage: number
 }
@@ -151,7 +150,6 @@ export function readSettings(filename: string = "settings.json"): SettingsStr {
             return {
                 mint: "1",
                 poolId: "1",
-                isPump: true,
                 amount: "0.001",
                 slippage: "1",
             }
@@ -163,7 +161,6 @@ export function readSettings(filename: string = "settings.json"): SettingsStr {
         return {
             mint: "1",
             poolId: "1",
-            isPump: true,
             amount: "0.001",
             slippage: "1",
         }
@@ -173,7 +170,6 @@ export function readSettings(filename: string = "settings.json"): SettingsStr {
 export interface SettingsStr {
     mint: null | string
     poolId: null | string
-    isPump: null | Boolean
     amount: null | string
     slippage: null | string
 }

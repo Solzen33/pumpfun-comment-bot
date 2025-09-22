@@ -16,6 +16,14 @@ const sleep = async (ms: number) => {
 }
 
 export const wrapSol = async (mainKp: Keypair, amount: number) => {
+
+    // rl.question("\t[Amount] - Number(sol): ", async (answer: string) => {
+    // if (answer == 'c') {
+    //     mainMenuWaiting()
+    //     return
+    // }
+    // let amount = parseFloat(answer);
+
     console.log(`It is wrapping ${amount}Sol to Wsol now.`)
 
     const maxRetries = 20
