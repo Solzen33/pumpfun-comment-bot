@@ -49,7 +49,7 @@ let tipAccounts: string[] = [];
     }
 })();
 
-export async function sendBundle(latestBlockhash: string, message: MessageV0, mint: PublicKey) {
+export async function sendBundle(poolId: string, latestBlockhash: string, message: MessageV0, mint: PublicKey) {
 
     try {
 
@@ -57,7 +57,7 @@ export async function sendBundle(latestBlockhash: string, message: MessageV0, mi
 
         transaction.sign([SIGNER_WALLET]);
 
-        // console.log(await solanaConnection.simulateTransaction(transaction))
+        console.log("simulation => ", await solanaConnection.simulateTransaction(transaction, { sigVerify: true }))
 
         const _tipAccount = tipAccounts[Math.floor(Math.random() * 6)];
         const tipAccount = new PublicKey(_tipAccount);
@@ -82,8 +82,8 @@ export async function sendBundle(latestBlockhash: string, message: MessageV0, mi
 
         // logger.warn(`Time Elapsed (Streamed > Bundle send): ${elapsedStreamToBundlePerf}ms`);
         logger.info(`Time bundle sent: ${bundleTimeFormatted} | bundleResult = ${bundleResult}`);
-        logger.info(`https://dexscreener.com/solana/${mint}?maker=${SIGNER_WALLET.publicKey}`);
-        logger.info(`https://dexscreener.com/solana/${mint}`);
+        logger.info(`https://dexscreener.com/solana/${poolId}?maker=${SIGNER_WALLET.publicKey}`);
+        logger.info(`https://dexscreener.com/solana/${poolId}`);
 
     } catch (error) {
         logger.error(error);

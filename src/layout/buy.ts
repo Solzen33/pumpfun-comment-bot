@@ -1,39 +1,46 @@
-import { ComputeBudgetProgram, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
+import { ComputeBudgetProgram, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, Transaction, TransactionMessage } from "@solana/web3.js";
 import { readSettings, sleep } from "../utils/utils";
-import { HIGHER_MC_INTERVAL, HIGHER_TP_INTERVAL, LOWER_MC_INTERVAL, LOWER_TP_INTERVAL, PRIVATE_KEY, DYNAMIC_AMM_PROGRAM_ID, SELL_TIMER, solanaConnection, STOP_LOSS } from "../constants";
+import { 
+    HIGHER_MC_INTERVAL, 
+    HIGHER_TP_INTERVAL, 
+    LOWER_MC_INTERVAL, 
+    LOWER_TP_INTERVAL, 
+    PRIVATE_KEY, 
+    SELL_TIMER, 
+    solanaConnection, 
+    STOP_LOSS,
+    DEX_PLATFORM,
+    PRICE_FEED_URL
+} from "../constants";
 import base58 from "bs58";
-import { logger, wrapSol } from "../utils";
-import { createAssociatedTokenAccountIdempotentInstruction, getAccount, getAssociatedTokenAddress, NATIVE_MINT } from "@solana/spl-token";
-import BN from "bn.js";
-import AmmImpl from "@meteora-ag/dynamic-amm-sdk";
+import { logger } from "../utils";
+import { getAccount, getAssociatedTokenAddress, NATIVE_MINT } from "@solana/spl-token";
 import { mainMenuWaiting } from "../..";
+import BN from "bn.js";
+import DLMM, { getTokenDecimals } from "@meteora-ag/dlmm";
 import { sendBundle } from "../jito/bundle";
+import { TradeResult, MarketCapData, PnLData } from "../types";
 
 export const mainKp = Keypair.fromSecretKey(base58.decode(PRIVATE_KEY!))
 
 export const buy_monitor_autosell = async () => {
     const data = readSettings();
-    const BUY_AMOUNT = Number(data.amount);
+    const BUY_AMOUNT = Number(data.amount); // Convert to lamports
     const TOKEN_CA = new PublicKey(data.mint!);
+    const IS_PUMPFUN = data.isPump!;
     const SLIPPAGE = Number(data.slippage);
     const POOL_ID = new PublicKey(data.poolId!);
 
-    let settings = {
-        mint: new PublicKey(data.mint!),
-        poolId: new PublicKey(data.poolId!),
-        amount: Number(data.amount),
-        slippage: Number(data.slippage)
-    }
-
-    const ammImpl = await AmmImpl.create(solanaConnection, POOL_ID);
-
-    const vaultALp = ammImpl.poolState.aVaultLp;
-    const vaultBLp = ammImpl.poolState.bVaultLp;
-
-    console.log("🚀 ~ constbuy_monitor_autosell= ~ Bal:", vaultALp)
-    console.log("🚀 ~ constbuy_monitor_autosell= ~ Bal:", vaultBLp)
+    const dlmmPool = await DLMM.create(solanaConnection, POOL_ID);
 
     const solBalance = (await solanaConnection.getBalance(mainKp.publicKey)) / LAMPORTS_PER_SOL;
+
+    const binArraysAccount = await dlmmPool.getBinArrays();
+    const lpToken = await dlmmPool.getMaxPriceInBinArrays(binArraysAccount)
+    console.log("🚀 ~ constbuy_monitor_autosell= ~ lpToken:", lpToken)
+
+    // const baseAta = dlmmPool.tokenX.reserve;
+    // const quoteAta = dlmmPool.tokenY.reserve;
 
     if (solBalance < Number(BUY_AMOUNT)) {
         logger.error(`There is not enough balance in your wallet. Please deposit some more solana to continue.`)
@@ -43,9 +50,7 @@ export const buy_monitor_autosell = async () => {
     logger.info(`Wallet address: ${mainKp.publicKey.toBase58()}`)
     logger.info(`Balance of the main wallet: ${solBalance}Sol`)
 
-    // await wrapSol(mainKp, Number(BUY_AMOUNT) * 2)
-
-    let middleMC = await getTokenMC(settings.mint)
+    let middleMC = await getTokenMC(TOKEN_CA)
     let mc = Math.floor(middleMC)
     let lowerMC = mc * (1 - LOWER_MC_INTERVAL / 100)
     let higherMC = mc * (1 + HIGHER_MC_INTERVAL / 100)
@@ -58,13 +63,12 @@ export const buy_monitor_autosell = async () => {
 
     while (1) {
 
-        let changedSolBalance: number | null = 0;
         let tpInterval
         processingToken = true
 
         while (1) {
             if (mcChecked != 0) {
-                middleMC = await getTokenMC(settings.mint)
+                middleMC = await getTokenMC(TOKEN_CA)
                 // middleHolderNum = (await findHolders(mintStr)).size
             }
             if (mcChecked > 100000) {
@@ -87,9 +91,9 @@ export const buy_monitor_autosell = async () => {
                 higherMC = mc * (1 + HIGHER_MC_INTERVAL / 100)
             } else if (middleMC > higherMC) {
                 logger.fatal(`Market Cap start increasing now, reached ${higherMC}Sol, can buy now...`)
-
-                await customSwap(ammImpl, NATIVE_MINT, BUY_AMOUNT * 10 ** 9, 5)
-                // await buy(mainKp, baseMint, BUY_AMOUNT, poolId)
+                logger.info(`Buying ${BUY_AMOUNT} SOL`)
+                // Quote to Base swap (⬆️)
+                await swap(dlmmPool, POOL_ID, NATIVE_MINT, TOKEN_CA, new BN(BUY_AMOUNT * 1_000_000_000), 1000, mainKp);
                 bought = true
                 break;
             } else {
@@ -111,12 +115,11 @@ export const buy_monitor_autosell = async () => {
             // Waiting for the AssociatedTokenAccount is confirmed
             const maxRetries = 50
             const delayBetweenRetries = 1000
-            let tokenAccountInfo
             const ata = await getAssociatedTokenAddress(TOKEN_CA, mainKp.publicKey)
+            const tokenDecimals = await getTokenDecimals(solanaConnection, TOKEN_CA)
 
             for (let attempt = 0; attempt < maxRetries; attempt++) {
                 try {
-                    tokenAccountInfo = await getAccount(solanaConnection, ata, "processed");
                     const tokenAmount = Number((await solanaConnection.getTokenAccountBalance(ata)).value.amount);
 
                     // Monitoring pnl
@@ -128,28 +131,26 @@ export const buy_monitor_autosell = async () => {
                         logger.info("Showing pnl monitoring...")
                         const priceCheckInterval = 200
                         const timesToCheck = SELL_TIMER / priceCheckInterval
-                        let TP_LEVEL = 1.5
-                        let higherTP = TP_LEVEL + HIGHER_TP_INTERVAL
+                        let TP_LEVEL = 1.3
+                        let higherTP = TP_LEVEL
                         let lowerTP = TP_LEVEL - LOWER_TP_INTERVAL
 
-                        const SolOnSl = Number((Number(BUY_AMOUNT) * (100 - STOP_LOSS) / 100).toFixed(6))
-                        console.log("🚀 ~ constbuy_monitor_autosell= ~ SolOnSl:", SolOnSl)
+                        const SolOnSl = Number((BUY_AMOUNT * (100 - STOP_LOSS) / 100).toFixed(6))
                         let timesChecked = 0
                         let tpReached = false
                         do {
 
                             try {
-                                // Quote to Base swap (⬇️)
-                                console.log("getSwapQuote for PNL monitoring...")
-                                const amountOut = await ammImpl.getSwapQuote(TOKEN_CA, new BN(amountIn), SLIPPAGE);
-                                console.log("🚀 ~ constbuy_monitor_autosell= ~ amountOut:", Number(amountOut.swapOutAmount))
+                                // Swap quote
+                                const swapYtoX = false;
+                                const binArrays = await dlmmPool.getBinArrayForSwap(swapYtoX);
 
-                                changedSolBalance = (await solanaConnection.getBalance(mainKp.publicKey)) / LAMPORTS_PER_SOL;
+                                const swapQuote = await dlmmPool.swapQuote(new BN(amountIn), swapYtoX, new BN(SLIPPAGE), binArrays);
+                                const amountOut = Number(swapQuote.outAmount);
 
-                                console.log("🚀 ~ constbuy_monitor_autosell= ~ solBalance:", solBalance)
-                                console.log("🚀 ~ constbuy_monitor_autosell= ~ changedSolBalance:", changedSolBalance)
-                                console.log("🚀 ~ constbuy_monitor_autosell= ~ wrapSolBalance! - changedWrapSolBalance!:", solBalance! - changedSolBalance!)
-                                const pnl = (Number(Number(amountOut.swapOutAmount) / 10 ** 9) - (solBalance! - changedSolBalance!)) / BUY_AMOUNT * 100
+                                console.log("🚀 ~ constbuy_monitor_autosell= ~ amountOut:", amountOut / tokenDecimals)
+
+                                const pnl = (Number(amountOut / tokenDecimals) - BUY_AMOUNT) / BUY_AMOUNT * 100
                                 console.log("🚀 ~ constbuy_monitor_autosell= ~ pnl:", pnl)
 
                                 if (pnl > TP_LEVEL && !tpReached) {
@@ -164,14 +165,14 @@ export const buy_monitor_autosell = async () => {
                                     lowerTP = TP_LEVEL - LOWER_TP_INTERVAL
                                 }
 
-                                logger.info(`Current: ${amountOut.minSwapOutAmount} SOL | PNL: ${pnl}% | HTP: ${higherTP.toFixed(2)}% | LTP: ${lowerTP.toFixed(2)}% | SL: ${SolOnSl}`)
-                                const amountOutNum = Number(amountOut.minSwapOutAmount) / 10 ** 9
+                                logger.info(`Current: ${amountOut / 10 ** 9} SOL | PNL: ${pnl.toFixed(7)}% | HTP: ${higherTP.toFixed(2)}% | LTP: ${lowerTP.toFixed(2)}% | SL: ${SolOnSl}`)
+                                const amountOutNum = Number(amountOut / 10 ** 9)
 
                                 if (amountOutNum < SolOnSl) {
                                     logger.fatal("Token is on stop loss level, will sell with loss")
                                     try {
                                         // const latestBlockHash = await (await solanaConnection.getLatestBlockhash()).blockhash
-                                        await customSwap(ammImpl, TOKEN_CA, amountIn, SLIPPAGE)
+                                        await swap(dlmmPool, POOL_ID, TOKEN_CA, NATIVE_MINT, new BN(tokenAmount), SLIPPAGE, mainKp);
                                         bought = false
                                         break;
                                     } catch (err) {
@@ -191,7 +192,7 @@ export const buy_monitor_autosell = async () => {
                                     } else if (pnl < lowerTP && tpReached) {
                                         logger.fatal("Token is on profit level, price starts going down, selling tokens...")
                                         try {
-                                            await customSwap(ammImpl, TOKEN_CA, amountIn, SLIPPAGE)
+                                            await swap(dlmmPool, POOL_ID, TOKEN_CA, NATIVE_MINT, new BN(tokenAmount), SLIPPAGE, mainKp);
                                             break;
                                         } catch (err) {
                                             logger.info("Fail to sell tokens ...")
@@ -205,21 +206,14 @@ export const buy_monitor_autosell = async () => {
                             }
                             await sleep(priceCheckInterval)
                             if (timesChecked >= timesToCheck) {
-                                await customSwap(ammImpl, TOKEN_CA, amountIn, SLIPPAGE)
+                                await swap(dlmmPool, POOL_ID, TOKEN_CA, NATIVE_MINT, new BN(tokenAmount), SLIPPAGE, mainKp);
                                 break
                             }
                         } while (1)
 
                         logger.warn(`New pumpswap token ${TOKEN_CA.toBase58()} PNL processing finished once and continue monitoring MarketCap`)
                         // logger.info(`Waiting 5 seconds for new buying and selling...`)
-                        await sleep(1000)
-                        // await wrapSol(mainKp, BUY_AMOUNT * 1.1)
-
-                        middleMC = await getTokenMC(settings.mint)
-                        // middleHolderNum = (await findHolders(mintStr)).size
-                        mc = Math.floor(middleMC)
-                        lowerMC = mc * (1 - LOWER_MC_INTERVAL / 100)
-                        higherMC = mc * (1 + HIGHER_MC_INTERVAL / 100)
+                        await sleep(2000)
 
                     } catch (error) {
                         logger.error("Error when setting profit amounts", error)
@@ -262,54 +256,142 @@ export const buy_monitor_autosell = async () => {
     }
 }
 
-export const customSwap = async (ammImpl: AmmImpl, inputTokenMint: PublicKey, amountIn: number, slippage: number) => {
-    console.log("🚀 ~ customSwap ~ amountIn:", amountIn)
-    const baseAta = await getAssociatedTokenAddress(inputTokenMint, mainKp.publicKey);
+export const swap = async (dlmmPool: DLMM, pool: PublicKey, inputMint: PublicKey, outputMint: PublicKey, buyAmount: BN, slippage: number, user: Keypair): Promise<TradeResult> => {
+    logger.info(`Executing swap: ${buyAmount.toString()} lamports`);
+    
     try {
-        const quoteAmount = await ammImpl.getSwapQuote(inputTokenMint, new BN(amountIn), slippage);
-        const expectedAmount = quoteAmount.minSwapOutAmount;
-        console.log("🚀 ~ customSwap ~ expectedAmount:", expectedAmount)
-        const latestBlockHash = await (await solanaConnection.getLatestBlockhash()).blockhash
+        // Determine swap direction
+        let swapYtoX: boolean = false;
+        if (inputMint.equals(NATIVE_MINT)) {
+            swapYtoX = true;
+        }
 
-        const swapInstruction = await ammImpl.swap(mainKp.publicKey, inputTokenMint, new BN(amountIn), expectedAmount);
+        // Get bin arrays for swap
+        const binArrays = await dlmmPool.getBinArrayForSwap(swapYtoX);
+        logger.debug(`Bin arrays retrieved: ${binArrays.length} arrays`);
 
-        const messageV0 = new TransactionMessage({
-            payerKey: mainKp.publicKey,
-            recentBlockhash: latestBlockHash,
-            instructions: [
-                ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 }), // Set this to super small value since it is not taken into account when sending as bundle.
-                ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }), // Calculated amount of units typically used in our transaction is about 70848. Setting limit slightly above.
-                ...swapInstruction.instructions,
-                createAssociatedTokenAccountIdempotentInstruction(mainKp.publicKey, baseAta, mainKp.publicKey, inputTokenMint),
-            ],
-        }).compileToV0Message();
+        // Get swap quote
+        const swapQuote = dlmmPool.swapQuote(buyAmount, swapYtoX, new BN(slippage), binArrays);
+        logger.info(`Swap quote - Input: ${buyAmount.toString()}, Output: ${swapQuote.outAmount.toString()}, Min Output: ${swapQuote.minOutAmount.toString()}`);
 
-        sendBundle(latestBlockHash, messageV0, inputTokenMint);
-    } catch (error) {
-        logger.error("Error in customSwap:", error);
-        throw error;
+        // Create swap transaction
+        const swapTransaction = await dlmmPool.swap({
+            inToken: inputMint,
+            outToken: outputMint,
+            binArraysPubkey: swapQuote.binArraysPubkey,
+            inAmount: buyAmount,
+            lbPair: dlmmPool.pubkey,
+            user: user.publicKey,
+            minOutAmount: swapYtoX ? swapQuote.minOutAmount : new BN(0),
+        });
+
+        // Set transaction properties
+        swapTransaction.feePayer = user.publicKey;
+        const { blockhash, lastValidBlockHeight } = await solanaConnection.getLatestBlockhash();
+        swapTransaction.recentBlockhash = blockhash;
+        swapTransaction.lastValidBlockHeight = lastValidBlockHeight;
+
+        // Simulate transaction
+        try {
+            const simulationResult = await solanaConnection.simulateTransaction(swapTransaction);
+            const { value } = simulationResult;
+            
+            if (value.err) {
+                logger.error("Transaction simulation failed:", value.err);
+                throw new Error(`Simulation failed: ${JSON.stringify(value.err)}`);
+            } else {
+                logger.info("Transaction simulation successful");
+            }
+        } catch (error: any) {
+            throw new Error(`Transaction simulation failed: ${error.message}`);
+        }
+
+        // Execute transaction
+        const signature = await sendAndConfirmTransaction(solanaConnection, swapTransaction, [user]);
+        logger.info(`Swap transaction successful: https://solscan.io/tx/${signature}`);
+
+        return {
+            success: true,
+            signature,
+            amountIn: Number(buyAmount),
+            amountOut: Number(swapQuote.outAmount),
+            timestamp: Date.now()
+        };
+
+    } catch (error: any) {
+        logger.error("Swap failed:", error);
+        return {
+            success: false,
+            error: error.message,
+            amountIn: Number(buyAmount),
+            amountOut: 0,
+            timestamp: Date.now()
+        };
     }
 }
 
-const getTokenPrice = async (mint: PublicKey) => {
+const getTokenPrice = async (mint: PublicKey): Promise<number | null> => {
     try {
-        const response = await fetch(
-            `https://api.jup.ag/price/v2?ids=${mint}`
-        );
-        const data: { data: { [key: string]: { price: number } } } =
-            await response.json();
-        const tokenPrice = Number(
-            data.data[`${mint}`].price
-        );
+        const response = await fetch(`${PRICE_FEED_URL}?ids=${mint}`);
+        const data: { data: { [key: string]: { price: number } } } = await response.json();
+        const tokenPrice = Number(data.data[`${mint}`]?.price);
+        
+        if (isNaN(tokenPrice)) {
+            logger.warn(`Invalid price data for token ${mint.toBase58()}`);
+            return null;
+        }
+        
         return tokenPrice;
     } catch (error) {
-        console.error("Error fetching data:", error);
+        logger.error("Error fetching token price:", error);
+        return null;
     }
 }
 
-const getTokenMC = async (mint: PublicKey) => {
-    const currentPrice = await getTokenPrice(mint)
-    const totalSupply = (await solanaConnection.getTokenSupply(mint)).value.uiAmount
-    console.log("🚀 ~ getTokenMC ~ totalSupply:", totalSupply)
-    return currentPrice! * totalSupply!
+const getTokenMC = async (mint: PublicKey): Promise<number | null> => {
+    try {
+        const currentPrice = await getTokenPrice(mint);
+        if (!currentPrice) {
+            logger.warn(`Could not fetch price for token ${mint.toBase58()}`);
+            return null;
+        }
+
+        const tokenSupply = await solanaConnection.getTokenSupply(mint);
+        const totalSupply = tokenSupply.value.uiAmount;
+        
+        if (!totalSupply) {
+            logger.warn(`Could not fetch supply for token ${mint.toBase58()}`);
+            return null;
+        }
+
+        const marketCap = currentPrice * totalSupply;
+        logger.debug(`Token ${mint.toBase58()} - Price: $${currentPrice}, Supply: ${totalSupply}, MC: $${marketCap}`);
+        
+        return marketCap;
+    } catch (error) {
+        logger.error("Error calculating market cap:", error);
+        return null;
+    }
+}
+
+// Generic market cap monitoring function
+export const getMarketCapData = async (mint: PublicKey): Promise<MarketCapData | null> => {
+    try {
+        const currentMC = await getTokenMC(mint);
+        if (!currentMC) return null;
+
+        const lowerMC = currentMC * (1 - LOWER_MC_INTERVAL / 100);
+        const higherMC = currentMC * (1 + HIGHER_MC_INTERVAL / 100);
+
+        return {
+            current: currentMC,
+            lower: lowerMC,
+            higher: higherMC,
+            change: 0, // Could be calculated with previous value
+            timestamp: Date.now()
+        };
+    } catch (error) {
+        logger.error("Error getting market cap data:", error);
+        return null;
+    }
 }

@@ -1,44 +1,215 @@
-# pumpswap-sdk for trading bot
+# PumpFun Comment Bot
 
-PumpSwap SDK for trading bot.
+An advanced automated comment bot for PumpFun platform that helps increase engagement and visibility for your token projects. This bot provides intelligent commenting strategies with customizable templates and timing controls.
 
-PumpSwap SDK is upgrading now.
+## 📱 Social Media
 
-`npm i pump-swap-core-v1`
+### Stay Connected
+| Platform | Link | Purpose |
+|----------|------|---------|
+| Telegram | [t.me/FroganBee.sol](https://t.me/froganbee_sol) | Announcements & Support |
+| X | [x.com/FroganBee.sol](https://x.com/froganbee_sol) | News & Updates |
 
-`yarn add pump-swap-core-v1`
+## 📹 Sample Videos
 
-# How to use
+Check out these demonstration videos to see the bot in action:
 
-### Buy Instruction
+- [PumpFun Comment Bot Demo 1](https://drive.google.com/file/d/12cG11VyLE6QJ4brn6ijQSG1RTurBAqwY/view?usp=drive_link)
+- [PumpFun Comment Bot Demo 2](https://drive.google.com/file/d/1XdBldd3p7P6iQfXJ6y13gSLwdjxYmmND/view?usp=drive_link)
+
+## Features
+
+- **Automated Commenting**: Post comments automatically on PumpFun token pages
+- **Smart Timing**: Configurable comment intervals and timing strategies
+- **Template System**: Customizable comment templates with dynamic content
+- **Multi-Account Support**: Manage multiple accounts for increased engagement
+- **Anti-Detection**: Built-in features to avoid detection and maintain account safety
+- **Analytics**: Track comment performance and engagement metrics
+- **Customizable Settings**: Fine-tune bot behavior and appearance
+- **Easy Configuration**: Simple setup with user-friendly interface
+
+## Supported Platforms
+
+- PumpFun (Primary platform)
+- Compatible with Solana-based token projects
+- Extensible for other social platforms
+
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# PumpFun Configuration
+PUMPFUN_API_URL=https://frontend-api.pump.fun
+PUMPFUN_WEBSOCKET_URL=wss://frontend-api.pump.fun
+
+# Bot Configuration
+COMMENT_INTERVAL=30000
+MAX_COMMENTS_PER_HOUR=20
+ACCOUNT_DELAY_MIN=5000
+ACCOUNT_DELAY_MAX=15000
+
+# Comment Templates
+COMMENT_TEMPLATES=template1,template2,template3
+RANDOMIZE_TEMPLATES=true
+
+# Account Management
+ACCOUNTS_FILE=accounts.json
+ACCOUNT_ROTATION=true
+
+# Safety Settings
+ANTI_DETECTION=true
+HUMAN_LIKE_DELAYS=true
+RANDOM_TYPING_SPEED=true
+
+# Logging
+LOG_LEVEL=info
+```
+
+## Installation
+
+1. Clone the repository
+```bash
+git clone <repository-url>
+cd pumpfun-comment-bot
+```
+
+2. Install dependencies
+```bash
+npm install
+```
+
+3. Configure environment variables
+```bash
+cp config.example.env .env
+# Edit .env with your configuration
+```
+
+4. Set up accounts
+```bash
+# Create accounts.json file with your PumpFun accounts
+# See accounts.example.json for format
+```
+
+5. Build the project
+```bash
+npm run build
+```
+
+## Usage
+
+### Start the bot
+```bash
+npm start
+```
+
+### Development mode
+```bash
+npm run dev
+```
+
+### Interactive Menu
+
+The bot provides an interactive CLI with the following options:
+
+1. **Show Current Settings** - Display current configuration
+2. **Settings** - Configure bot parameters
+   - Comment templates
+   - Timing intervals
+   - Account management
+   - Safety settings
+3. **Start Commenting** - Begin automated commenting
+4. **Manage Accounts** - Add/remove accounts
+5. **View Analytics** - Check comment performance
+6. **Exit** - Close the application
+
+## Comment Strategy
+
+### Smart Commenting
+- Automatically posts comments on PumpFun token pages
+- Uses configurable templates with dynamic content
+- Implements human-like timing and behavior patterns
+
+### Account Management
+- Multi-account support for increased engagement
+- Account rotation to avoid detection
+- Random delays between account switches
+
+### Safety Features
+- Anti-detection mechanisms
+- Human-like typing speeds
+- Randomized comment intervals
+- Account cooldown periods
+
+## Configuration
+
+### Settings File
+The bot uses `settings.json` to store bot parameters:
+
+```json
+{
+  "commentTemplates": [
+    "Great project! 🚀",
+    "This looks promising! 💎",
+    "Amazing work team! 🔥"
+  ],
+  "commentInterval": 30000,
+  "maxCommentsPerHour": 20,
+  "accountRotation": true
+}
+```
+
+### Bot Parameters
+- **Comment Templates**: Predefined comment messages
+- **Timing Intervals**: Delay between comments
+- **Account Management**: Multi-account configuration
+- **Safety Settings**: Anti-detection parameters
+
+## Architecture
 
 ```
- const buyTx = new Transaction()
-        .add(
-            createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, user_base_token_account, payer.publicKey, base_mint),
-            createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, user_quote_token_account, payer.publicKey, NATIVE_MINT),
-            SystemProgram.transfer({
-                fromPubkey: payer.publicKey,
-                toPubkey: user_quote_token_account,
-                lamports: Number(quote_amt),
-            }),
-            createSyncNativeInstruction(user_quote_token_account)
-        );
-
-    buyTx.add(
-        await pSwap.getBuyInstruction(base_amt, quote_amt, {
-            pool,
-            baseMint: base_mint,
-            quoteMint: NATIVE_MINT,
-            baseTokenProgram: TOKEN_PROGRAM_ID,
-            quoteTokenProgram: TOKEN_PROGRAM_ID,
-            user: payer.publicKey
-        })
-    )
+src/
+├── constants/          # Configuration constants
+├── layout/            # Comment posting logic
+├── menu/              # CLI interface
+├── types/             # TypeScript type definitions
+├── utils/             # Utility functions
+├── templates/         # Comment templates
+└── accounts/          # Account management
 ```
 
-# Preference
+## Dependencies
 
-You can find example file for Transaction in [Here](https://github.com/vvizardev/pumpswap-sdk/tree/main/src/example)
+- **axios**: HTTP requests to PumpFun API
+- **ws**: WebSocket connections
+- **pino**: Structured logging
+- **chalk**: Terminal styling
+- **inquirer**: Interactive prompts
 
-[Contact](https://github.com/vvizardev) for debug & report
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+ISC License - see LICENSE file for details
+
+## Disclaimer
+
+This software is for educational and research purposes only. Trading cryptocurrencies involves substantial risk of loss and is not suitable for all investors. The past performance of any trading system or methodology is not necessarily indicative of future results.
+
+## Support
+
+For issues and questions:
+- Create an issue in the repository
+- Check the documentation
+- Review the configuration examples
+
+## Version History
+
+- **v2.0.0**: PumpFun Comment Bot with advanced features
+- **v1.x**: Basic commenting functionality

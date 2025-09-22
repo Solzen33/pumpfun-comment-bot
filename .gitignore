@@ -1,15 +1,5 @@
-#   env
-.env
+/node_modules
 
-*.test.ts
+/dist
 
-
-#   node mudule
-node_modules
-
-#   lock file
-*.lock
-*-lock.json
-
-#   dist
-dist
+/settings.json
