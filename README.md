@@ -1,6 +1,22 @@
-# PumpFun Comment Bot
+markdown
 
-An advanced automated comment bot for PumpFun platform that helps increase engagement and visibility for your token projects. This bot provides intelligent commenting strategies with customizable templates and timing controls.
+# 🚀 Pump.Fun Comment Bot – Solana Auto Shill & Engagement Tool
+
+[![Solana](https://img.shields.io/badge/Solana-Devnet/Mainnet-9945FF?style=flat&logo=solana)](https://solana.com)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-brightgreen)](https://nodejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+![GitHub stars](https://img.shields.io/github/stars/Solzen33/pumpfun-comment-bot?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Solzen33/pumpfun-comment-bot?style=social)
+
+**Pump.fun comment bot** — an open-source automated tool for **Solana Pump.fun** that posts hype comments, builds threads, and shills tokens to boost visibility and engagement. Supports **Thread mode** (conversation building), **Shill mode** (spam on new/trending tokens), fresh wallet rotation, image uploads, and captcha solving.
+
+Perfect for memecoin creators wanting to generate activity, create FOMO, or simulate community vibes on pump.fun launches.
+
+**⚠️ WARNING**  
+This tool involves automated engagement which may violate Pump.fun's terms → risk of shadow-bans, account restrictions, or token penalties.  
+Use at your own risk. For **educational & testing purposes** only. Not financial advice. Never use real funds without understanding risks.
+
+
 
 ## 📱 Social Media
 
